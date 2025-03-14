@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulaire avec Carte Interactive</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <style>
+        #map {
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        input[type="text"], input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-container">
+    <h2>Formulaire de localisation</h2>
+
+    <form id="locationForm" action="#" method="post">
+        <label for="address">Adresse:</label>
+        <input type="text" id="address" name="address" placeholder="Entrez une adresse" required>
+
+        <div id="map"></div>
+
+        <label for="lat">Latitude:</label>
+        <input type="text" id="lat" name="lat" readonly>
+
+        <label for="lng">Longitude:</label>
+        <input type="text" id="lng" name="lng" readonly>
+
+        <input type="submit" value="Envoyer">
+    </form>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+    // Initialisation de la carte centrée sur la France
+    var map = L.map('map').setView([46.603354, 1.888334], 6);  // Centre de la France
+
+    // Tuiles OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Fonction pour gérer le clic sur la carte
+    map.on('click', function(e) {
+        var lat = e.latlng.lat;
+        var lng = e.latlng.lng;
+
+        // Affichage des coordonnées GPS dans les champs du formulaire
+        document.getElementById('lat').value = lat;
+        document.getElementById('lng').value = lng;
+    });
+
+    // Géocodage d'une adresse (si l'utilisateur entre une adresse)
+    document.getElementById('address').addEventListener('blur', function() {
+        var address = document.getElementById('address').value;
+        if (address) {
+            var url = `https://nominatim.openstreetmap.org/search?q=${address}&format=json`;
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        var lat = data[0].lat;
+                        var lon = data[0].lon;
+                        map.setView([lat, lon], 13);  // Centre la carte sur l'adresse
+                        L.marker([lat, lon]).addTo(map);  // Place un marqueur
+
+                        // Remplissage des champs de coordonnées
+                        document.getElementById('lat').value = lat;
+                        document.getElementById('lng').value = lon;
+                    }
+                })
+                .catch(error => console.error("Erreur de géocodage :", error));
+        }
+    });
+</script>
+
+</body>
+</html>
