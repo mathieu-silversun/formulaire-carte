@@ -17,12 +17,28 @@
             border: 1px solid #ccc;
             border-radius: 8px;
         }
-        input[type="text"], input[type="submit"] {
+        input[type="text"], input[type="number"], input[type="submit"] {
             width: 100%;
             padding: 10px;
             margin: 10px 0;
             border: 1px solid #ccc;
             border-radius: 4px;
+        }
+        .autocomplete-suggestions {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            background-color: white;
+            border: 1px solid #ccc;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .autocomplete-suggestion {
+            padding: 10px;
+            cursor: pointer;
+        }
+        .autocomplete-suggestion:hover {
+            background-color: #f0f0f0;
         }
     </style>
 </head>
@@ -32,8 +48,10 @@
     <h2>Formulaire de localisation</h2>
 
     <form id="locationForm" action="#" method="post">
-        <label for="address">Adresse:</label>
-        <input type="text" id="address" name="address" placeholder="Entrez une adresse" required>
+        <label for="projectSearch">Nom du projet:</label>
+        <input type="text" id="projectSearch" name="projectSearch" placeholder="Tapez le nom d'un projet" autocomplete="off" required>
+
+        <ul id="suggestionsList" class="autocomplete-suggestions"></ul>
 
         <div id="map"></div>
 
@@ -43,53 +61,88 @@
         <label for="lng">Longitude:</label>
         <input type="text" id="lng" name="lng" readonly>
 
+        <!-- Nouveau champ "puissance" -->
+        <label for="puissance">Puissance:</label>
+        <input type="number" id="puissance" name="puissance" readonly required>
+
         <input type="submit" value="Envoyer">
     </form>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-    // Initialisation de la carte centrée sur la France
-    var map = L.map('map').setView([46.603354, 1.888334], 6);  // Centre de la France
+// Initialisation de la carte centrée sur la France avec une vue aérienne
+var map = L.map('map').setView([46.603354, 1.888334], 6);  // Centre de la France
 
-    // Tuiles OpenStreetMap
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+// Tuiles OpenStreetMap avec vue aérienne (Esri)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community'
 }).addTo(map);
 
+// Fonction pour gérer le clic sur la carte
+map.on('click', function(e) {
+    var lat = e.latlng.lat;
+    var lng = e.latlng.lng;
 
-    // Fonction pour gérer le clic sur la carte
-    map.on('click', function(e) {
-        var lat = e.latlng.lat;
-        var lng = e.latlng.lng;
+    // Affichage des coordonnées GPS dans les champs du formulaire
+    document.getElementById('lat').value = lat;
+    document.getElementById('lng').value = lng;
+});
 
-        // Affichage des coordonnées GPS dans les champs du formulaire
-        document.getElementById('lat').value = lat;
-        document.getElementById('lng').value = lng;
-    });
+// Recherche dynamique de projets Zoho
+const apiUrl = 'https://projectsapi.zoho.com/restapi/portal/[PORTAL_ID]/projects/search';
+const accessToken = 'ton_jeton_d_acces';
 
-    // Géocodage d'une adresse (si l'utilisateur entre une adresse)
-    document.getElementById('address').addEventListener('blur', function() {
-        var address = document.getElementById('address').value;
-        if (address) {
-            var url = `https://nominatim.openstreetmap.org/search?q=${address}&format=json`;
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        var lat = data[0].lat;
-                        var lon = data[0].lon;
-                        map.setView([lat, lon], 13);  // Centre la carte sur l'adresse
-                        L.marker([lat, lon]).addTo(map);  // Place un marqueur
+document.getElementById('projectSearch').addEventListener('input', function() {
+    const searchText = this.value;
+    if (searchText.length < 3) {
+        document.getElementById('suggestionsList').innerHTML = '';
+        return;
+    }
 
-                        // Remplissage des champs de coordonnées
-                        document.getElementById('lat').value = lat;
-                        document.getElementById('lng').value = lon;
-                    }
-                })
-                .catch(error => console.error("Erreur de géocodage :", error));
-        }
-    });
+    // Requête pour rechercher des projets par nom
+    const url = `${apiUrl}?name=${searchText}&authtoken=${accessToken}`;
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const projects = data.projects;
+            const suggestionsList = document.getElementById('suggestionsList');
+            suggestionsList.innerHTML = ''; // Effacer les anciennes suggestions
+
+            if (projects && projects.length > 0) {
+                projects.forEach(project => {
+                    const li = document.createElement('li');
+                    li.textContent = project.name;
+                    li.classList.add('autocomplete-suggestion');
+                    li.addEventListener('click', function() {
+                        document.getElementById('projectSearch').value = project.name;
+                        document.getElementById('suggestionsList').innerHTML = ''; // Fermer la liste
+                        remplirPuissance(project.id);
+                    });
+                    suggestionsList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'Aucun projet trouvé';
+                suggestionsList.appendChild(li);
+            }
+        })
+        .catch(error => console.error('Erreur de recherche de projets :', error));
+});
+
+// Remplir le champ "puissance" avec la valeur UDF_DOUBLE1
+function remplirPuissance(projectId) {
+    const projectUrl = `https://projectsapi.zoho.com/restapi/portal/[PORTAL_ID]/projects/${projectId}/`;
+    const url = `${projectUrl}?authtoken=${accessToken}`;
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const puissance = data.project.UDF_DOUBLE1;
+            document.getElementById('puissance').value = puissance;
+        })
+        .catch(error => console.error('Erreur de récupération des détails du projet :', error));
+}
 </script>
 
 </body>
